@@ -269,7 +269,7 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 		wp_clear_scheduled_hook($action_tag);
 		wp_clear_scheduled_hook($action_tag, $old_instance);
 		wp_clear_scheduled_hook($action_tag, array($old_instance));
-		add_action('tally_up_recently_popular_counts', array(&$this,'tally_up_counts'), 10, 1);
+		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
 		//wp_schedule_event(strtotime(mktime(date('H'),0,0,date('m'),date('d'),date('Y')), 'hourly', 'tally_up_recently_popular_counts', $instance);
 		wp_schedule_event(mktime(date('H'),0,0,date('m'),date('d'),date('Y'))+3600, 'hourly', $action_tag, array($instance));		
 	}
