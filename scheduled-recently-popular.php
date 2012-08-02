@@ -87,9 +87,8 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 		register_deactivation_hook($this->get_file_path(), array(&$this, 'deactivate'));
 		//add_action('admin_menu', array(&$this, 'admin_menu'));
 		$this->widget_title = __('Scheduled Recently Popular');
-		$action_tag = 'tally_up_recently_popular_counts';
-		if (srp_is_wpmu()) $action_tag .= $current_blog->blog_id;
-		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
+		// instead of add_action
+		//$this->srp_update();
 	}
 
 	public function get_counts($ops = array()) { //集計結果取得表示メソッド
@@ -250,15 +249,32 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 	}
 	
 	public function activate() {
+		global $current_blog;
 		$this->activate_recently_popular();
+		$action_tag = 'tally_up_recently_popular_counts';
+		$option_tag = 'scheduled-recently-popular';
+		if (srp_is_wpmu()) {
+			$action_tag .= $current_blog->blog_id;
+			$option_tag .= $current_blog->blog_id;
+		}
+		update_option($option_tag, $this->data);
+		add_action('wp', array(&$this,'srp_update'));
+		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
 	}
 	public function deactivate() {
 		global $current_blog;
 		$action_tag = 'tally_up_recently_popular_counts';
-		if (srp_is_wpmu()) $action_tag .= '_'.$current_blog->blog_id;
+		$option_tag = 'scheduled-recently-popular';
+		if (srp_is_wpmu()) {
+			$action_tag .= $current_blog->blog_id;
+			$option_tag .= $current_blog->blog_id;
+		}
 		wp_clear_scheduled_hook($action_tag);
 		wp_clear_scheduled_hook($action_tag, $instance);
 		wp_clear_scheduled_hook($action_tag, array($instance));
+		remove_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
+		remove_action('wp', array(&$this,'srp_update'));
+		delete_option($option_tag); 
 	}
 
 	public function schedule_tallying_up($instance, $old_instance) {
@@ -272,6 +288,29 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
 		//wp_schedule_event(strtotime(mktime(date('H'),0,0,date('m'),date('d'),date('Y')), 'hourly', 'tally_up_recently_popular_counts', $instance);
 		wp_schedule_event(mktime(date('H'),0,0,date('m'),date('d'),date('Y'))+3600, 'hourly', $action_tag, array($instance));		
+	}
+	
+	public function srp_update(){
+		if ($this->srp_update_control()) {
+			global $current_blog;
+			$action_tag = 'tally_up_recently_popular_counts';
+			$option_tag = 'scheduled-recently-popular';
+			if (srp_is_wpmu()) {
+				$action_tag .= $current_blog->blog_id;
+				$option_tag .= $current_blog->blog_id;
+			}
+			$instance = get_option($option_tag);
+			do_action($action_tag, $instance);
+		}
+	}
+	public function srp_update_control() {
+		$update = false;
+		syslog(LOG_NOTICE, $_SERVER['REMOTE_ADDR']);
+		if ( isset( $_GET['srp_update'] ) && $_SERVER['REMOTE_ADDR'] == '127.0.0.1' ) {
+			syslog(LOG_NOTICE, 'srp_update');
+			$update = true;
+		}
+		return $update;
 	}
 }
 	
@@ -299,7 +338,6 @@ class ScheduledRecentlyPopularWidget extends RecentlyPopularWidget {
 	}
 
 	public function widget($args, $instance) { //ウィジェット表示部．DBから集計結果の取得
-		syslog(LOG_NOTICE, "display widget:");
 		extract($args, EXTR_SKIP);
 		$args['title'] = apply_filters('widget_title', $instance['title']);
 		echo($before_widget);
@@ -325,7 +363,11 @@ class ScheduledRecentlyPopularWidget extends RecentlyPopularWidget {
 	public function update($new_instance, $old_instance) {
 		syslog(LOG_NOTICE, "update.");
 		$action_tag = 'tally_up_recently_popular_counts';
-		if (srp_is_wpmu()) $action_tag .= $current_blog->blog_id;
+		$option_tag = 'scheduled-recently-popular';
+		if (srp_is_wpmu()) {
+			$action_tag .= $current_blog->blog_id;
+			$option_tag .= $current_blog->blog_id;
+		}
 		$instance['categories'] = '';
 		if (isset($new_instance['categories'])) {
 			foreach ($new_instance['categories'] as $category) {
@@ -351,6 +393,7 @@ class ScheduledRecentlyPopularWidget extends RecentlyPopularWidget {
 		$instance['relative_time'] = ($new_instance['relative_time'] == '1') ? '1' : '0';
 		$instance['title'] = strip_tags($new_instance['title']);
 		$instance['user_type'] = intval($new_instance['user_type']);
+		update_option($option_tag, $instance);
 		$srp = new ScheduledRecentlyPopular();
 		//$srp->tally_up_counts($instance);
 		$srp->schedule_tallying_up($instance, $old_instance);
