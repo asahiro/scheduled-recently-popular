@@ -81,14 +81,22 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 	}
 
 	public function __construct() {
+		global $current_blog;
+		$action_tag = 'tally_up_recently_popular_counts';
+		$option_tag = 'scheduled-recently-popular';
+		if (srp_is_wpmu()) {
+			$action_tag .= '_'.$current_blog->blog_id;
+			$option_tag .= '_'.$current_blog->blog_id;
+		}
 		$this->data = &ScheduledRecentlyPopularUtil::$defaults;
 		load_plugin_textdomain('recently-popular', 'recently-popular/languages');
-		register_activation_hook($this->get_file_path(), array(&$this, 'activate'));
+		register_activation_hook($this->get_file_path(), array($this, 'activate'));
 		register_deactivation_hook($this->get_file_path(), array(&$this, 'deactivate'));
 		//add_action('admin_menu', array(&$this, 'admin_menu'));
 		$this->widget_title = __('Scheduled Recently Popular');
-		// instead of add_action
-		//$this->srp_update();
+		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
+		add_action('wp', array(&$this,'srp_update')); // instead of __construct()
+		//$this->srp_update(); // instead of add_action
 	}
 
 	public function get_counts($ops = array()) { //集計結果取得表示メソッド
@@ -254,26 +262,22 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 		$action_tag = 'tally_up_recently_popular_counts';
 		$option_tag = 'scheduled-recently-popular';
 		if (srp_is_wpmu()) {
-			$action_tag .= $current_blog->blog_id;
-			$option_tag .= $current_blog->blog_id;
+			$action_tag .= '_'.$current_blog->blog_id;
+			$option_tag .= '_'.$current_blog->blog_id;
 		}
 		update_option($option_tag, $this->data);
-		add_action('wp', array(&$this,'srp_update'));
-		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
 	}
 	public function deactivate() {
 		global $current_blog;
 		$action_tag = 'tally_up_recently_popular_counts';
 		$option_tag = 'scheduled-recently-popular';
 		if (srp_is_wpmu()) {
-			$action_tag .= $current_blog->blog_id;
-			$option_tag .= $current_blog->blog_id;
+			$action_tag .= '_'.$current_blog->blog_id;
+			$option_tag .= '_'.$current_blog->blog_id;
 		}
 		wp_clear_scheduled_hook($action_tag);
 		wp_clear_scheduled_hook($action_tag, $instance);
 		wp_clear_scheduled_hook($action_tag, array($instance));
-		remove_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
-		remove_action('wp', array(&$this,'srp_update'));
 		delete_option($option_tag); 
 	}
 
@@ -281,11 +285,11 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 		global $current_blog;
 		srp_timezone_setup();
 		$action_tag = 'tally_up_recently_popular_counts';
-		if (srp_is_wpmu()) $action_tag .= $current_blog->blog_id;
+		if (srp_is_wpmu()) $action_tag .= '_'.$current_blog->blog_id;
 		wp_clear_scheduled_hook($action_tag);
 		wp_clear_scheduled_hook($action_tag, $old_instance);
 		wp_clear_scheduled_hook($action_tag, array($old_instance));
-		add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
+		//add_action($action_tag, array(&$this,'tally_up_counts'), 10, 1);
 		//wp_schedule_event(strtotime(mktime(date('H'),0,0,date('m'),date('d'),date('Y')), 'hourly', 'tally_up_recently_popular_counts', $instance);
 		wp_schedule_event(mktime(date('H'),0,0,date('m'),date('d'),date('Y'))+3600, 'hourly', $action_tag, array($instance));		
 	}
@@ -296,8 +300,8 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 			$action_tag = 'tally_up_recently_popular_counts';
 			$option_tag = 'scheduled-recently-popular';
 			if (srp_is_wpmu()) {
-				$action_tag .= $current_blog->blog_id;
-				$option_tag .= $current_blog->blog_id;
+				$action_tag .= '_'.$current_blog->blog_id;
+				$option_tag .= '_'.$current_blog->blog_id;
 			}
 			$instance = get_option($option_tag);
 			do_action($action_tag, $instance);
@@ -305,14 +309,17 @@ class ScheduledRecentlyPopular extends RecentlyPopular {
 	}
 	public function srp_update_control() {
 		$update = false;
-		syslog(LOG_NOTICE, $_SERVER['REMOTE_ADDR']);
-		if ( isset( $_GET['srp_update'] ) && $_SERVER['REMOTE_ADDR'] == '127.0.0.1' ) {
+		//syslog(LOG_NOTICE, (isset( $_GET['srp_update'])) ? 'SRP_UPDATE is enable' : 'SRP_UPDATE is disable');
+		//syslog(LOG_NOTICE, gethostbyaddr($_SERVER['REMOTE_ADDR']));
+		if ( isset( $_GET['srp_update'] ) && gethostbyaddr($_SERVER['REMOTE_ADDR']) == 'localhost' ) {
 			syslog(LOG_NOTICE, 'srp_update');
 			$update = true;
 		}
 		return $update;
 	}
 }
+
+$GLOBALS['scheduled_recently_popular'] = new ScheduledRecentlyPopular();
 	
 class ScheduledRecentlyPopularWidget extends RecentlyPopularWidget {
 
@@ -361,12 +368,12 @@ class ScheduledRecentlyPopularWidget extends RecentlyPopularWidget {
 	}
 
 	public function update($new_instance, $old_instance) {
-		syslog(LOG_NOTICE, "update.");
+		//syslog(LOG_NOTICE, "update.");
 		$action_tag = 'tally_up_recently_popular_counts';
 		$option_tag = 'scheduled-recently-popular';
 		if (srp_is_wpmu()) {
-			$action_tag .= $current_blog->blog_id;
-			$option_tag .= $current_blog->blog_id;
+			$action_tag .= '_'.$current_blog->blog_id;
+			$option_tag .= '_'.$current_blog->blog_id;
 		}
 		$instance['categories'] = '';
 		if (isset($new_instance['categories'])) {
@@ -525,6 +532,6 @@ class ScheduledRecentlyPopularWidget extends RecentlyPopularWidget {
 	}
 
 }// class ScheduledRecentlyPopularWidget
-new ScheduledRecentlyPopularWidget();
+$GLOBALS['scheduled_recently_popular_widget'] = new ScheduledRecentlyPopularWidget();
 
 ?>
